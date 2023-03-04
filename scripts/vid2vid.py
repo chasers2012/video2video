@@ -272,7 +272,7 @@ class Script(scripts.Script):
                                 encoder.writeFrame(np.asarray(newoutput).copy())
                                 job_i += 1
                                 state.job_no = job_i
-                            controlnet_framecounter = controlnet_framecounter + 1
+                                controlnet_framecounter = controlnet_framecounter + 1
                         else:
                             encoder.writeFrame(np.asarray(newoutput).copy())
                             job_i += 1
