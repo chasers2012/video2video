@@ -257,12 +257,14 @@ class Script(scripts.Script):
 
                     for output in proc.images:
                         if type(output) == "numpy.ndarray":
+                            print("Type controlnet")
                             newoutput = Image.fromarray(output,mode='RGB')
                         else:
+                            print(type(output))
                             newoutput = output
 
                         if newoutput.mode != "RGB":
-                            newoutput = output.convert("RGB")
+                            newoutput = newoutput.convert("RGB")
                         encoder.writeFrame(np.asarray(newoutput).copy())
                         job_i += 1
                         state.job_no = job_i
