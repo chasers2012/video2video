@@ -256,9 +256,14 @@ class Script(scripts.Script):
                         break
 
                     for output in proc.images:
-                        if output.mode != "RGB":
-                            output = output.convert("RGB")
-                        encoder.writeFrame(np.asarray(output).copy())
+                        if type(output) == "numpy.ndarray":
+                            newoutput = Image.fromarray(output,mode='RGB')
+                        else:
+                            newoutput = output
+
+                        if newoutput.mode != "RGB":
+                            newoutput = output.convert("RGB")
+                        encoder.writeFrame(np.asarray(newoutput).copy())
                         job_i += 1
                         state.job_no = job_i
 
