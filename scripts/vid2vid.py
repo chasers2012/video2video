@@ -255,17 +255,28 @@ class Script(scripts.Script):
                     except:
                         break
 
+                    controlnet_framecounter = 0
                     for output in proc.images:
                         if isinstance(output, (np.ndarray, np.generic) ):
+                            controlnet_frame = True
                             newoutput = Image.fromarray(output,mode='RGB')
                         else:
+                            controlnet_frame = False
                             newoutput = output
 
                         if newoutput.mode != "RGB":
                             newoutput = newoutput.convert("RGB")
-                        encoder.writeFrame(np.asarray(newoutput).copy())
-                        job_i += 1
-                        state.job_no = job_i
+                        
+                        if controlnet_frame:
+                            if (controlnet_framecounter % 2) == 0:
+                                encoder.writeFrame(np.asarray(newoutput).copy())
+                                job_i += 1
+                                state.job_no = job_i
+                                controlnet_framecounter = controlnet_framecounter + 1
+                        else:
+                            encoder.writeFrame(np.asarray(newoutput).copy())
+                            job_i += 1
+                            state.job_no = job_i
 
             #encoder.write_eof()
             encoder.close()
