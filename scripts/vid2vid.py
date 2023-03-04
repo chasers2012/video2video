@@ -254,9 +254,12 @@ class Script(scripts.Script):
                         proc = process_images(p)
                     except:
                         break
-
+                    
+                    framecounter = 0
                     for output in proc.images:
                         if isinstance(output, (np.ndarray, np.generic) ):
+                            if (framecounter % 2) != 0:
+                                continue
                             newoutput = Image.fromarray(output,mode='RGB')
                         else:
                             newoutput = output
