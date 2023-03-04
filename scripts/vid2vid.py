@@ -256,11 +256,9 @@ class Script(scripts.Script):
                         break
 
                     for output in proc.images:
-                        if type(output) == "numpy.ndarray":
-                            print("Type controlnet")
+                        if isinstance(output, (np.ndarray, np.generic) ):
                             newoutput = Image.fromarray(output,mode='RGB')
                         else:
-                            print(type(output))
                             newoutput = output
 
                         if newoutput.mode != "RGB":
