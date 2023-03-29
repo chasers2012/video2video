@@ -1,3 +1,12 @@
+# Changes made in this fork:
+
+Support for ControlNet:
+
+How to use:
+When generating, enable the ControlNet tab (Make sure you have ControlNet extension installed), and select your settings
+Then check the "Using ControlNet" tab in the script settings
+Generate and it will use ControlNet
+
 # Automatic1111 Stable Diffusion WebUI Video2Video Extension
 
 ## Pluging for img2img video processing

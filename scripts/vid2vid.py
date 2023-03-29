@@ -129,6 +129,7 @@ class Script(scripts.Script):
                 with gr.Column(min_width=100):
                         freeze_input_fps = gr.Checkbox(label='Keep input frames', value=False)
                         keep_fps = gr.Checkbox(label='Keep FPS', value=False)
+                        use_controlnet = gr.Checkbox(label='Using ControlNet', value=False)
                 with gr.Column(min_width=100):
                         sfactor  = gr.Slider(
                             label="Strength",
@@ -147,14 +148,14 @@ class Script(scripts.Script):
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,sfactor,sexp,freeze_input_fps,keep_fps]
+            return [tmp_path, fps, file,sfactor,sexp,freeze_input_fps,keep_fps,use_controlnet]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, use_controlnet, *args):
             save_dir = "outputs/img2img-video/"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -275,13 +276,26 @@ class Script(scripts.Script):
                         proc = process_images(p)
                     except:
                         break
-
+                    
+                    controlnet_counter = 0
                     for output in proc.images:
-                        if output.mode != "RGB":
-                            output = output.convert("RGB")
-                        encoder.writeFrame(np.asarray(output).copy())
+                        if use_controlnet:
+                            if controlnet_counter == 1:
+                                continue
+                        
+                        if isinstance(output, (np.ndarray, np.generic) ):
+                            newoutput = Image.fromarray(output,mode='RGB')
+                        else:
+                            newoutput = output
+
+                        if newoutput.mode != "RGB":
+                            newoutput = newoutput.convert("RGB")
+                            
+                        encoder.writeFrame(np.asarray(newoutput).copy())
                         job_i += 1
                         state.job_no = job_i
+
+                        controlnet_counter = 1
 
             #encoder.write_eof()
             encoder.close()
