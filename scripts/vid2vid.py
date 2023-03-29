@@ -9,6 +9,7 @@ import shutil
 import string
 import pathlib
 from subprocess import Popen, PIPE
+import threading
 import numpy as np
 from PIL import Image
 from random import randint
@@ -18,7 +19,7 @@ import modules
 from modules.script_callbacks import on_cfg_denoiser,remove_current_script_callbacks
 
 import gradio as gr
-from modules import scripts
+from modules import scripts, deepbooru
 from modules.images import save_image
 from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
@@ -26,6 +27,7 @@ from modules.processing import Processed, process_images, StableDiffusionProcess
 from modules import processing
 from modules.shared import state
 import json
+import modules.shared as shared
 
 try: # make me know if there is better solution
     import skvideo
@@ -83,6 +85,19 @@ class Script(scripts.Script):
         #from RIFE_HDv3 import Model
         #model = Model()
         #model.load_model('flownet.pkl', -1)
+
+    def interrogate(self, image, model):
+        if model is None or image is None:
+            return 
+        
+        # Override object param
+        with threading.Lock():
+            if model == "clip":
+                processed = shared.interrogator.interrogate(image)
+            elif model == "deepdanbooru":
+                processed = deepbooru.model.tag(image)
+
+        return processed
 
 
     # ui components
@@ -236,19 +251,25 @@ class Script(scripts.Script):
             batch = []
             is_last = False
             frame_generator = decoder.nextFrame()
+            original_prompt = p.prompt
             while not is_last:
-
+                extra_prompts = []
+                prompts = None
                 raw_image = next(frame_generator,[])
                 image_PIL = None
                 if len(raw_image)==0:
                     is_last = True
                 else:
                     image_PIL = Image.fromarray(raw_image,mode='RGB')
+                    prompts = self.interrogate(image_PIL, 'deepdanbooru')
+                    extra_prompts.append(prompts)
                     batch.append(image_PIL)
 
                 if (len(batch) == p.batch_size) or ( (len(batch) > 0) and is_last ):
                     p.seed = initial_seed
                     p.init_images = batch
+                    
+                    p.prompt = [original_prompt + ', ' + x  for x in extra_prompts]
                     batch = []
                     try:
                         proc = process_images(p)
