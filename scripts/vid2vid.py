@@ -15,7 +15,7 @@ from PIL import Image
 from random import randint
 import platform
 import modules
-
+from modules.shared import state
 from modules.script_callbacks import on_cfg_denoiser,remove_current_script_callbacks
 
 import gradio as gr
@@ -55,7 +55,10 @@ class LatentMemory:
         self.latents_now.append(latent)
 
     def get(self):
-        return self.latents_mem.pop(0)
+        lm = self.latents_mem.pop(0)
+        if len(self.latents_mem)==0:
+            self.flushed = False
+        return lm
 
     def interpolate(self, latent1, latent2):
         latent = latent1 * (1. - self.nowfactor) + latent2 * self.nowfactor
@@ -88,14 +91,15 @@ class Script(scripts.Script):
 
     def interrogate(self, image, model):
         if model is None or image is None:
-            return 
+            return ''
         
         # Override object param
-        with threading.Lock():
-            if model == "clip":
-                processed = shared.interrogator.interrogate(image)
-            elif model == "deepdanbooru":
-                processed = deepbooru.model.tag(image)
+        if model == "clip":
+            processed = shared.interrogator.interrogate(image)
+        elif model == "deepdanbooru":
+            processed = deepbooru.model.tag(image)
+        else:
+            return ''
 
         return processed
 
@@ -145,17 +149,20 @@ class Script(scripts.Script):
                             step=0.005,
                             value=1.0,
                         )
+            with gr.Row():
+                interrogator=gr.Dropdown(value='none', choices=['none','clip', 'deepdanbooru'],label="Select interrogator:")
+
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,sfactor,sexp,freeze_input_fps,keep_fps,use_controlnet]
+            return [tmp_path, fps, file,sfactor,sexp,freeze_input_fps,keep_fps,use_controlnet, interrogator]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, use_controlnet, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
             save_dir = "outputs/img2img-video/"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -173,7 +180,7 @@ class Script(scripts.Script):
                         latent = self.latentmem.get()
                         params.x = self.latentmem.interpolate(params.x, latent)
 
-                    if params.sampling_step == params.total_sampling_steps-2:
+                    if params.sampling_step == params.total_sampling_steps - 2:
                         self.latentmem.flush()
 
                 on_cfg_denoiser(callback)
@@ -189,7 +196,7 @@ class Script(scripts.Script):
             processing.fix_seed(p)
 
             p.do_not_save_grid = True
-            p.do_not_save_samples = True
+            p.do_not_save_samples = False
             p.batch_count = 1
 
             start_time = "00:00:00"
@@ -222,9 +229,9 @@ class Script(scripts.Script):
             output_file = os.path.splitext(output_file)[0]
 
             i=1
-            while os.path.isfile(f'{save_dir}/{i}_{output_file}.mp4'):
+            while os.path.isfile(f'{save_dir}/{output_file}_{i}.mp4'):
                 i+=1
-            output_file = f'{save_dir}/{i}_{output_file}.mp4'
+            output_file = f'{save_dir}/{output_file}_{i}.mp4'
 
             if keep_fps:
                 if '@r_frame_rate' in decoder.probeInfo['video']:
@@ -254,6 +261,8 @@ class Script(scripts.Script):
             frame_generator = decoder.nextFrame()
             original_prompt = p.prompt
             while not is_last:
+                if state.interrupted:
+                    break
                 extra_prompts = []
                 prompts = None
                 raw_image = next(frame_generator,[])
@@ -262,7 +271,7 @@ class Script(scripts.Script):
                     is_last = True
                 else:
                     image_PIL = Image.fromarray(raw_image,mode='RGB')
-                    prompts = self.interrogate(image_PIL, 'deepdanbooru')
+                    prompts = self.interrogate(image_PIL, interrogator)
                     extra_prompts.append(prompts)
                     batch.append(image_PIL)
 
@@ -296,7 +305,8 @@ class Script(scripts.Script):
                         state.job_no = job_i
 
                         controlnet_counter = 1
-
+                # put original prompt back incase other plugins change it during process
+                p.prompt=original_prompt
             #encoder.write_eof()
             encoder.close()
             remove_current_script_callbacks()
