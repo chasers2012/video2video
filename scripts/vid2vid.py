@@ -170,12 +170,12 @@ class Script(scripts.Script):
             self.latentmem = LatentMemory(interp_factor=sfactor,scale_factor=sexp)
             if not self.is_have_callback:
                 def callback(params):#CFGDenoiserParams
-                    self.latentmem.put(params.x)
                     if self.latentmem.flushed:
                         latent = self.latentmem.get()
                         params.x = self.latentmem.interpolate(params.x, latent)
+                    self.latentmem.put(params.x)
 
-                    if params.sampling_step == params.total_sampling_steps - 2:
+                    if params.sampling_step == params.total_sampling_steps - 1:
                         self.latentmem.flush()
 
                 on_cfg_denoiser(callback)
