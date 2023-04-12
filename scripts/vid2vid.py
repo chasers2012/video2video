@@ -3,13 +3,8 @@
 # https://github.com/Filarius
 # https://github.com/Filarius/video2video
 
-import json
 import os,sys
-import shutil
-import string
-import pathlib
 from subprocess import Popen, PIPE
-import threading
 import numpy as np
 from PIL import Image
 from random import randint
@@ -26,8 +21,8 @@ from modules.sd_samplers_kdiffusion import KDiffusionSampler
 from modules.processing import Processed, process_images, StableDiffusionProcessingImg2Img
 from modules import processing
 from modules.shared import state
-import json
 import modules.shared as shared
+import ffmpeg as libffmpeg
 
 try: # make me know if there is better solution
     import skvideo
@@ -163,7 +158,7 @@ class Script(scripts.Script):
             return self.img2img_component
 
     def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
-            save_dir = "outputs/img2img-video/"
+            save_dir = "outputs/img2img-video"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
             if platform.system() == 'Windows':
@@ -227,11 +222,12 @@ class Script(scripts.Script):
 
             output_file = os.path.basename(input_file)
             output_file = os.path.splitext(output_file)[0]
-
+            
             i=1
             while os.path.isfile(f'{save_dir}/{output_file}_{i}.mp4'):
                 i+=1
-            output_file = f'{save_dir}/{output_file}_{i}.mp4'
+            output_file_final = f'{save_dir}/{output_file}_{i}.mp4'
+            output_file = f'{save_dir}/{output_file}_{i}-noaudio.mp4'
 
             if keep_fps:
                 if '@r_frame_rate' in decoder.probeInfo['video']:
@@ -309,6 +305,8 @@ class Script(scripts.Script):
                 p.prompt=original_prompt
             #encoder.write_eof()
             encoder.close()
+            ffmpeg.concat_audio(input_file, output_file, output_file_final, path=path if platform.system() == 'Windows' else None )
+            
             remove_current_script_callbacks()
             self.is_have_callback = False
             return Processed(p, [], p.seed, proc.info)
@@ -412,6 +410,16 @@ class ffmpeg:
             print("Downloading FFmpeg: Done")
         return
 
+    @staticmethod
+    def concat_audio(src, dst, out, path=None):
+        src=os.path.abspath(src)
+        dst=os.path.abspath(dst)
+        input_video = libffmpeg.input(dst)
+        input_audio = libffmpeg.input(src)
+        cmd = os.path.abspath(os.path.join(os.path.join(path, "ffmpeg"), "ffmpeg.exe")) if path is not None else None
+        libffmpeg.concat(input_video, input_audio, v=1, a=1).output(out).run(cmd=cmd)
+
+        
     @staticmethod
     def seconds(input="00:00:00"):
         [hours, minutes, seconds] = [int(pair) for pair in input.split(":")]
