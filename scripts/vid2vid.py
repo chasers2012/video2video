@@ -91,6 +91,8 @@ class Script(scripts.Script):
         # Override object param
         if model == "clip":
             processed = shared.interrogator.interrogate(image)
+        elif model == "clip(no_style)":
+            processed = shared.interrogator.interrogate(image).split(',')[0]
         elif model == "deepdanbooru":
             processed = deepbooru.model.tag(image)
         else:
@@ -145,7 +147,7 @@ class Script(scripts.Script):
                             value=1.0,
                         )
             with gr.Row():
-                interrogator=gr.Dropdown(value='none', choices=['none','clip', 'deepdanbooru'],label="Select interrogator:")
+                interrogator=gr.Dropdown(value='none', choices=['none','clip', 'clip(no_style)', 'deepdanbooru'],label="Select interrogator:")
 
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
