@@ -1,5 +1,9 @@
 # Changes made in this fork:
 
+Support for interrogator
+
+Add audio back
+
 Support for ControlNet:
 
 How to use:
@@ -14,7 +18,7 @@ Generate and it will use ControlNet
 - Video fps can be set as original, or changed.
 - Now with latent space temporal blending.
 
-Result saved to **output** folder **img2img-video** as MP4 file in H264 encoding (no audio). 
+Result saved to **output** folder **img2img-video** as MP4 file in H264 encoding. 
 
 Added optional temporal blending for latent space. Applied per each step between previous and current frame.
 
