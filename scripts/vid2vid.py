@@ -156,7 +156,7 @@ class Script(scripts.Script):
                     minimum=0,
                     maximum=1,
                     step=0.01,
-                    value=0.8,
+                    value=0.15,
                 )
             with gr.Row():
                 interrogator=gr.Dropdown(value='none', choices=['none','clip', 'clip(no_style)', 'deepdanbooru'],label="Select interrogator:")
