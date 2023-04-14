@@ -38,13 +38,12 @@ except:
     import skvideo
 
 class LatentMemory:
-    def __init__(self, interp_factor=0.1, scale_factor = 0.95):
+    def __init__(self, interp_factor_start=0.1, interp_factor_end = 0.95):
         self.latents_now = []
         self.latents_mem = []
         self.flushed = False
-        self.ifactor = interp_factor * 0.5 #
-        self.nowfactor = self.ifactor
-        self.scalefactor = scale_factor
+        self.interp_factor_start = interp_factor_start #
+        self.interp_factor_end = interp_factor_end
 
     def put(self,latent):
         self.latents_now.append(latent)
@@ -55,15 +54,14 @@ class LatentMemory:
             self.flushed = False
         return lm
 
-    def interpolate(self, latent1, latent2):
-        latent = latent1 * (1. - self.nowfactor) + latent2 * self.nowfactor
-        self.nowfactor = self.nowfactor * self.scalefactor
+    def interpolate(self, latent1, latent2, step_factor):
+        factor = self.interp_factor_start + step_factor * (self.interp_factor_end-self.interp_factor_start)
+        latent = latent1 * (1. - factor) + latent2 * factor
         return latent
 
     def flush(self):
         self.latents_mem = self.latents_now
         self.latents_now = []
-        self.nowfactor = self.ifactor
         self.flushed = True
 
 
@@ -132,19 +130,19 @@ class Script(scripts.Script):
                         keep_fps = gr.Checkbox(label='Keep FPS', value=False)
                         use_controlnet = gr.Checkbox(label='Using ControlNet', value=False)
                 with gr.Column(min_width=100):
-                        sfactor  = gr.Slider(
-                            label="Strength",
+                        interp_factor_start  = gr.Slider(
+                            label="Strength Start",
                             minimum=0.0,
                             maximum=1.0,
                             step=0.01,
                             value=0.2,
                         )
-                        sexp = gr.Slider(
-                            label="Strength scaling (per step)",
-                            minimum=0.9,
-                            maximum=1.1,
-                            step=0.005,
-                            value=1.0,
+                        interp_factor_end = gr.Slider(
+                            label="Strength End",
+                            minimum=0.0,
+                            maximum=1.0,
+                            step=0.01,
+                            value=0.2,
                         )
             with gr.Row():
                 interrogator=gr.Dropdown(value='none', choices=['none','clip', 'clip(no_style)', 'deepdanbooru'],label="Select interrogator:")
@@ -152,14 +150,14 @@ class Script(scripts.Script):
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,sfactor,sexp,freeze_input_fps,keep_fps,use_controlnet, interrogator]
+            return [tmp_path, fps, file,interp_factor_start,interp_factor_end,freeze_input_fps,keep_fps,use_controlnet, interrogator]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, sfactor, sexp, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
             save_dir = "outputs/img2img-video"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -169,15 +167,16 @@ class Script(scripts.Script):
                 skvideo.setFFmpegPath(os.path.join(path, "ffmpeg"))
             import skvideo.io
 
-            self.latentmem = LatentMemory(interp_factor=sfactor,scale_factor=sexp)
+            self.latentmem = LatentMemory(interp_factor_start=interp_factor_start, interp_factor_end=interp_factor_end)
             if not self.is_have_callback:
                 def callback(params):#CFGDenoiserParams
                     if self.latentmem.flushed:
                         latent = self.latentmem.get()
-                        params.x = self.latentmem.interpolate(params.x, latent)
+                        if params.sampling_step < params.total_sampling_steps -2:
+                            params.x = self.latentmem.interpolate(params.x, latent, params.sampling_step / params.total_sampling_steps)
                     self.latentmem.put(params.x)
 
-                    if params.sampling_step == params.total_sampling_steps - 1:
+                    if params.sampling_step == params.total_sampling_steps - 2:
                         self.latentmem.flush()
 
                 on_cfg_denoiser(callback)
