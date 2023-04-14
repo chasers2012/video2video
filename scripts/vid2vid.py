@@ -12,7 +12,8 @@ import platform
 import modules
 from modules.shared import state
 from modules.script_callbacks import on_cfg_denoiser,remove_current_script_callbacks
-
+import math
+import torch
 import gradio as gr
 from modules import scripts, deepbooru
 from modules.images import save_image
@@ -63,6 +64,11 @@ class LatentMemory:
         self.latents_mem = self.latents_now
         self.latents_now = []
         self.flushed = True
+        
+    def discard(self):
+        self.latents_mem = []
+        self.latents_now = []
+        self.flushed = False
 
 
 class Script(scripts.Script):
@@ -145,19 +151,27 @@ class Script(scripts.Script):
                             value=0.2,
                         )
             with gr.Row():
+                mae_threshold = gr.Slider(
+                    label="MAE Threshold",
+                    minimum=0,
+                    maximum=1,
+                    step=0.01,
+                    value=0.8,
+                )
+            with gr.Row():
                 interrogator=gr.Dropdown(value='none', choices=['none','clip', 'clip(no_style)', 'deepdanbooru'],label="Select interrogator:")
 
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,interp_factor_start,interp_factor_end,freeze_input_fps,keep_fps,use_controlnet, interrogator]
+            return [tmp_path, fps, file,interp_factor_start,interp_factor_end, mae_threshold, freeze_input_fps,keep_fps,use_controlnet, interrogator]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, mae_threshold, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
             save_dir = "outputs/img2img-video"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -171,7 +185,7 @@ class Script(scripts.Script):
             if not self.is_have_callback:
                 def callback(params):#CFGDenoiserParams
                     if self.latentmem.flushed:
-                        latent = self.latentmem.get()
+                        latent = self.latentmem.get()                        
                         if params.sampling_step < params.total_sampling_steps -2:
                             params.x = self.latentmem.interpolate(params.x, latent, params.sampling_step / params.total_sampling_steps)
                     self.latentmem.put(params.x)
@@ -257,12 +271,14 @@ class Script(scripts.Script):
             is_last = False
             frame_generator = decoder.nextFrame()
             original_prompt = p.prompt
+            prev_image = None
             while not is_last:
                 if state.interrupted:
                     break
                 extra_prompts = []
                 prompts = None
                 raw_image = next(frame_generator,[])
+                
                 image_PIL = None
                 if len(raw_image)==0:
                     is_last = True
@@ -271,6 +287,15 @@ class Script(scripts.Script):
                     prompts = self.interrogate(image_PIL, interrogator)
                     extra_prompts.append(prompts)
                     batch.append(image_PIL)
+                if prev_image is not None:
+                    curr_image = np.array(image_PIL).ravel()
+                    MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
+                    print()
+                    print("MAE:")
+                    print(MAE)
+                    
+                    if MAE > mae_threshold:
+                        self.latentmem.discard()
 
                 if (len(batch) == p.batch_size) or ( (len(batch) > 0) and is_last ):
                     p.seed = initial_seed
@@ -304,6 +329,7 @@ class Script(scripts.Script):
                         controlnet_counter = 1
                 # put original prompt back incase other plugins change it during process
                 p.prompt=original_prompt
+                prev_image=np.array(image_PIL).ravel()
             #encoder.write_eof()
             encoder.close()
             ffmpeg.concat_audio(input_file, output_file, output_file_final, path=path if platform.system() == 'Windows' else None )
