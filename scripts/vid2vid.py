@@ -11,7 +11,7 @@ from random import randint
 import platform
 import modules
 from modules.shared import state
-from modules.script_callbacks import on_cfg_denoiser,remove_current_script_callbacks
+from modules.script_callbacks import CFGDenoiserParams, on_cfg_denoiser,remove_current_script_callbacks
 import math
 import torch
 import gradio as gr
@@ -183,7 +183,7 @@ class Script(scripts.Script):
 
             self.latentmem = LatentMemory(interp_factor_start=interp_factor_start, interp_factor_end=interp_factor_end)
             if not self.is_have_callback:
-                def callback(params):#CFGDenoiserParams
+                def callback(params: CFGDenoiserParams):
                     self.latentmem.put(params.x)
                     if self.latentmem.flushed:
                         latent = self.latentmem.get()                        
@@ -291,8 +291,8 @@ class Script(scripts.Script):
                     curr_image = np.array(image_PIL).ravel()
                     MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
                     print()
-                    print("MAE:")
-                    print(MAE)
+                    print("MAE:", MAE)
+                    print()
                     
                     if MAE > mae_threshold:
                         self.latentmem.discard()
