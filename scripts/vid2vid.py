@@ -302,8 +302,8 @@ class Script(scripts.Script):
                         curr_image = np.array(image_PIL).ravel()
                         MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
                         print()
-                        print("MAE:", MAE)
-                        print()
+                        print("MAE:")
+                        print(MAE)
                         if MAE > mae_threshold:
                             self.latentmem.discard()
                         prev_image=np.array(image_PIL).ravel()
