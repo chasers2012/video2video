@@ -184,11 +184,11 @@ class Script(scripts.Script):
             self.latentmem = LatentMemory(interp_factor_start=interp_factor_start, interp_factor_end=interp_factor_end)
             if not self.is_have_callback:
                 def callback(params):#CFGDenoiserParams
+                    self.latentmem.put(params.x)
                     if self.latentmem.flushed:
                         latent = self.latentmem.get()                        
                         if params.sampling_step < params.total_sampling_steps -2:
                             params.x = self.latentmem.interpolate(params.x, latent, params.sampling_step / params.total_sampling_steps)
-                    self.latentmem.put(params.x)
 
                     if params.sampling_step == params.total_sampling_steps - 2:
                         self.latentmem.flush()
