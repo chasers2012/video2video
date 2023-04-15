@@ -203,7 +203,7 @@ class Script(scripts.Script):
             if not os.path.isfile(file_path):
                 file_path = file_obj.name
                 
-            resume_file_path = resume_file_obj.name
+            resume_file_path = resume_file_obj.name if resume_file_obj is not None else None
             initial_seed = p.seed
             if initial_seed == -1:
                 initial_seed = randint(100000000,999999999)
@@ -229,18 +229,18 @@ class Script(scripts.Script):
             )
 
             input_file = os.path.normpath(file_path.strip())
-            resume_file = os.path.normpath(resume_file_path.strip())
+            resume_file = os.path.normpath(resume_file_path.strip()) if resume_file_path is not None else None
 
             if freeze_input_fps:
                 decoder = skvideo.io.FFmpegReader(input_file)
-                resume_decoder = skvideo.io.FFmpegReader(resume_file)
+                resume_decoder = skvideo.io.FFmpegReader(resume_file) if resume_file is not None else None
             else:
                 decoder = skvideo.io.FFmpegReader(input_file,outputdict={
                     '-r':str(fps)
                 })
                 resume_decoder = skvideo.io.FFmpegReader(resume_file,outputdict={
                     '-r':str(fps)
-                })
+                }) if resume_file is not None else None
                 
             
             
@@ -282,7 +282,7 @@ class Script(scripts.Script):
             batch = []
             is_last = False
             frame_generator = decoder.nextFrame()
-            resume_frame_generator = resume_decoder.nextFrame()
+            resume_frame_generator = resume_decoder.nextFrame() if resume_file is not None else None
             original_prompt = p.prompt
             prev_image = None
             while not is_last:
@@ -291,7 +291,7 @@ class Script(scripts.Script):
                 extra_prompts = []
                 prompts = None
                 raw_image = next(frame_generator,[])
-                resume_frame = next(resume_frame_generator,[])
+                resume_frame = next(resume_frame_generator,[]) if resume_frame_generator is not None else []
 
                 image_PIL = None
                 if len(raw_image)==0:
@@ -306,7 +306,8 @@ class Script(scripts.Script):
                         print(MAE)
                         if MAE > mae_threshold:
                             self.latentmem.discard()
-                        prev_image=np.array(image_PIL).ravel()
+                    prev_image=np.array(image_PIL).ravel()
+
                     if len(resume_frame) > 0:
                         encoder.writeFrame(np.asarray(Image.fromarray(resume_frame, mode='RGB')).copy())
                         state.job_no += 1
