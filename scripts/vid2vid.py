@@ -132,9 +132,9 @@ class Script(scripts.Script):
                 gr.HTML(value='<div class="text-center block">Latent space temporal blending</div></br>')
             with gr.Row():
                 with gr.Column(min_width=100):
-                        freeze_input_fps = gr.Checkbox(label='Keep input frames', value=False)
-                        keep_fps = gr.Checkbox(label='Keep FPS', value=False)
-                        use_controlnet = gr.Checkbox(label='Using ControlNet', value=False)
+                    freeze_input_fps = gr.Checkbox(label='Keep input frames', value=False)
+                    keep_fps = gr.Checkbox(label='Keep FPS', value=False)
+                    use_controlnet = gr.Checkbox(label='Using ControlNet', value=False)
                 with gr.Column(min_width=100):
                         interp_factor_start  = gr.Slider(
                             label="Strength Start",
@@ -158,20 +158,24 @@ class Script(scripts.Script):
                     step=0.01,
                     value=0.15,
                 )
+                
             with gr.Row():
                 interrogator=gr.Dropdown(value='none', choices=['none','clip', 'clip(no_style)', 'deepdanbooru'],label="Select interrogator:")
-
+                
+            with gr.Row():
+                resume_file = gr.File(label="Upload Video to Resume", file_types = ['.*;'], live=True, file_count = "single")
+                
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,interp_factor_start,interp_factor_end, mae_threshold, freeze_input_fps,keep_fps,use_controlnet, interrogator]
+            return [tmp_path, fps, file,interp_factor_start,interp_factor_end, mae_threshold, freeze_input_fps,keep_fps,use_controlnet, interrogator, resume_file]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, mae_threshold, freeze_input_fps, keep_fps, use_controlnet, interrogator, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, mae_threshold, freeze_input_fps, keep_fps, use_controlnet, interrogator, resume_file_obj, *args):
             save_dir = "outputs/img2img-video"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -198,12 +202,13 @@ class Script(scripts.Script):
 
             if not os.path.isfile(file_path):
                 file_path = file_obj.name
-
+                
+            resume_file_path = resume_file_obj.name
             initial_seed = p.seed
             if initial_seed == -1:
                 initial_seed = randint(100000000,999999999)
                 p.seed = initial_seed
-            processing.fix_seed(p)
+            processing.fix_seed(p) 
 
             p.do_not_save_grid = True
             p.do_not_save_samples = False
@@ -224,16 +229,23 @@ class Script(scripts.Script):
             )
 
             input_file = os.path.normpath(file_path.strip())
+            resume_file = os.path.normpath(resume_file_path.strip())
 
             if freeze_input_fps:
                 decoder = skvideo.io.FFmpegReader(input_file)
+                resume_decoder = skvideo.io.FFmpegReader(resume_file)
             else:
                 decoder = skvideo.io.FFmpegReader(input_file,outputdict={
-                '-r':str(fps)
-            })
+                    '-r':str(fps)
+                })
+                resume_decoder = skvideo.io.FFmpegReader(resume_file,outputdict={
+                    '-r':str(fps)
+                })
+                
+            
+            
             state.job_count = decoder.inputframenum
-            job_i = 0
-            state.job_no = job_i
+            state.job_no = 0
 
             output_file = os.path.basename(input_file)
             output_file = os.path.splitext(output_file)[0]
@@ -270,6 +282,7 @@ class Script(scripts.Script):
             batch = []
             is_last = False
             frame_generator = decoder.nextFrame()
+            resume_frame_generator = resume_decoder.nextFrame()
             original_prompt = p.prompt
             prev_image = None
             while not is_last:
@@ -278,24 +291,29 @@ class Script(scripts.Script):
                 extra_prompts = []
                 prompts = None
                 raw_image = next(frame_generator,[])
-                
+                resume_frame = next(resume_frame_generator,[])
+
                 image_PIL = None
                 if len(raw_image)==0:
                     is_last = True
                 else:
                     image_PIL = Image.fromarray(raw_image,mode='RGB')
+                    if prev_image is not None:
+                        curr_image = np.array(image_PIL).ravel()
+                        MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
+                        print()
+                        print("MAE:", MAE)
+                        print()
+                        if MAE > mae_threshold:
+                            self.latentmem.discard()
+                        prev_image=np.array(image_PIL).ravel()
+                    if len(resume_frame) > 0:
+                        encoder.writeFrame(np.asarray(Image.fromarray(resume_frame, mode='RGB')).copy())
+                        state.job_no += 1
+                        continue
                     prompts = self.interrogate(image_PIL, interrogator)
                     extra_prompts.append(prompts)
                     batch.append(image_PIL)
-                if prev_image is not None:
-                    curr_image = np.array(image_PIL).ravel()
-                    MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
-                    print()
-                    print("MAE:", MAE)
-                    print()
-                    
-                    if MAE > mae_threshold:
-                        self.latentmem.discard()
 
                 if (len(batch) == p.batch_size) or ( (len(batch) > 0) and is_last ):
                     p.seed = initial_seed
@@ -323,13 +341,11 @@ class Script(scripts.Script):
                             newoutput = newoutput.convert("RGB")
                             
                         encoder.writeFrame(np.asarray(newoutput).copy())
-                        job_i += 1
-                        state.job_no = job_i
+                        state.job_no += 1
 
                         controlnet_counter = 1
                 # put original prompt back incase other plugins change it during process
                 p.prompt=original_prompt
-                prev_image=np.array(image_PIL).ravel()
             #encoder.write_eof()
             encoder.close()
             ffmpeg.concat_audio(input_file, output_file, output_file_final, path=path if platform.system() == 'Windows' else None )
