@@ -150,6 +150,24 @@ class Script(scripts.Script):
                             step=0.01,
                             value=0.2,
                         )
+            
+            with gr.Row():
+                with gr.Column(min_width=100):
+                    interp_step_start  = gr.Slider(
+                            label="Start Step",
+                            minimum=0.0,
+                            maximum=1.0,
+                            step=0.01,
+                            value=0.0,
+                        )
+                with gr.Column(min_width=100):
+                    interp_step_end  = gr.Slider(
+                            label="End Step",
+                            minimum=0.0,
+                            maximum=1.0,
+                            step=0.01,
+                            value=1.0,
+                        )
             with gr.Row():
                 mae_threshold = gr.Slider(
                     label="MAE Threshold",
@@ -168,14 +186,14 @@ class Script(scripts.Script):
             file.upload(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             tmp_path.change(fn=img_dummy_update,inputs=[self.img2img_component],outputs=[self.img2img_component])
             #self.img2img_component.update(Image.new("RGB",(512,512),0))
-            return [tmp_path, fps, file,interp_factor_start,interp_factor_end, mae_threshold, freeze_input_fps,keep_fps,use_controlnet, interrogator, resume_file]
+            return [tmp_path, fps, file,interp_factor_start,interp_factor_end, mae_threshold, freeze_input_fps,keep_fps,use_controlnet, interrogator, resume_file, interp_step_start, interp_step_end]
 
     def after_component(self, component, **kwargs):
         if component.elem_id == "img2img_image":
             self.img2img_component = component
             return self.img2img_component
 
-    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, mae_threshold, freeze_input_fps, keep_fps, use_controlnet, interrogator, resume_file_obj, *args):
+    def run(self, p:StableDiffusionProcessingImg2Img, file_path, fps, file_obj, interp_factor_start, interp_factor_end, mae_threshold, freeze_input_fps, keep_fps, use_controlnet, interrogator, resume_file_obj, interp_step_start, interp_step_end, *args):
             save_dir = "outputs/img2img-video"
             os.makedirs(save_dir, exist_ok=True)
             path = modules.paths.script_path
@@ -188,13 +206,17 @@ class Script(scripts.Script):
             self.latentmem = LatentMemory(interp_factor_start=interp_factor_start, interp_factor_end=interp_factor_end)
             if not self.is_have_callback:
                 def callback(params: CFGDenoiserParams):
+                    total = params.total_sampling_steps - 2
+                    if params.sampling_step / (total) < interp_step_start:
+                        return
+                    if params.sampling_step / (total) > interp_step_end:
+                        return
                     self.latentmem.put(params.x)
                     if self.latentmem.flushed:
                         latent = self.latentmem.get()                        
-                        if params.sampling_step < params.total_sampling_steps -2:
-                            params.x = self.latentmem.interpolate(params.x, latent, params.sampling_step / params.total_sampling_steps)
+                        params.x = self.latentmem.interpolate(params.x, latent, (params.sampling_step - interp_step_start * total) / ((interp_step_end - interp_step_start) * total))
 
-                    if params.sampling_step == params.total_sampling_steps - 2:
+                    if params.sampling_step == total:
                         self.latentmem.flush()
 
                 on_cfg_denoiser(callback)
