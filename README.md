@@ -4,6 +4,10 @@ Support for interrogator
 
 Add audio back
 
+Improved strength arrangement
+
+Disable latent memory on scene switch, based on MAE
+
 Support for ControlNet:
 
 How to use:
