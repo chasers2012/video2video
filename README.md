@@ -34,7 +34,8 @@ Under development, bugs applied.
 
 ffmpeg
 
-skvideo (pip install sk-video)
+skvideo (pip install scikit-video)
+numpy==1.23.3 # for skvideo support
 
 ## TODO
 

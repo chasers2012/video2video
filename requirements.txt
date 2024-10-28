@@ -1,2 +1,3 @@
 ffmpeg
 scikit-video
+numpy==1.23.3
