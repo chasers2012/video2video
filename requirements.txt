@@ -1,2 +1,2 @@
-sk-video
-ffmpeg-python
+ffmpeg
+scikit-video

@@ -25,18 +25,8 @@ from modules.shared import state
 import modules.shared as shared
 import ffmpeg as libffmpeg
 
-try: # make me know if there is better solution
-    import skvideo
-except:
-    if 'VENV_DIR' in os.environ:
-        path = os.path.join(os.environ["VENV_DIR"],'scripts','python')
-    elif 'PYTHON' in os.environ:
-        path = os.path.join(os.environ["PYTHON"], 'python')
-    else:
-        from shutil import which
-        path = which("python")
-    os.system(path+ " -m pip install sk-video")
-    import skvideo
+import skvideo
+
 
 class LatentMemory:
     def __init__(self, interp_factor_start=0.1, interp_factor_end = 0.95):
@@ -307,6 +297,7 @@ class Script(scripts.Script):
             resume_frame_generator = resume_decoder.nextFrame() if resume_file is not None else None
             original_prompt = p.prompt
             prev_image = None
+            print('starting')
             while not is_last:
                 if state.interrupted:
                     break
@@ -322,7 +313,7 @@ class Script(scripts.Script):
                     image_PIL = Image.fromarray(raw_image,mode='RGB')
                     if prev_image is not None:
                         curr_image = np.array(image_PIL).ravel()
-                        MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float))) / curr_image.shape[0] / 255
+                        MAE = np.sum(np.abs(np.subtract(curr_image,prev_image,dtype=np.float32))) / curr_image.shape[0] / 255
                         print()
                         print("MAE:")
                         print(MAE)
@@ -366,7 +357,7 @@ class Script(scripts.Script):
                         encoder.writeFrame(np.asarray(newoutput).copy())
                         state.job_no += 1
 
-                        controlnet_counter = 1
+                        controlnet_counter =1
                 # put original prompt back incase other plugins change it during process
                 p.prompt=original_prompt
             #encoder.write_eof()
